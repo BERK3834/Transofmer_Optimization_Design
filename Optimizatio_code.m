@@ -1,16 +1,16 @@
 %% ================================================================
-% EE3006 Task 4 
-% Final Maxwell-consistent version
-% Baseline: 230/115, Wc = 45 mm
+% EE3006 Task 4 Optimization
+% Maxwell-consistent safe optimization
+% Baseline: N1=230, N2=115, Wc=45 mm
 %% ================================================================
 
 clc; clear; close all;
 
 %% Given data
-S  = 1000;
-V1 = 220;
-V2 = 110;
-f  = 50;
+S  = 1000;     % VA
+V1 = 220;      % V rms
+V2 = 110;      % V rms
+f  = 50;       % Hz
 a  = V1/V2;
 
 I1 = S/V1;
@@ -20,9 +20,9 @@ D    = 80e-3;
 Wwin = 40e-3;
 Hwin = 70e-3;
 
-rho_cu  = 0.0175;
-dens_cu = 8960;
-dens_fe = 7650;
+rho_cu  = 0.0175;   % ohm mm^2/m
+dens_cu = 8960;     % kg/m^3
+dens_fe = 7650;     % kg/m^3
 kf      = 0.95;
 
 price_cu = 9.0;
@@ -37,7 +37,7 @@ Bcorr = 1.43 / 1.260;
 
 B_limit = 1.50;
 
-%% Fixed AWG values
+%% Fixed conductor areas
 Aw1 = 2.08;   % AWG14 primary [mm^2]
 Aw2 = 5.26;   % AWG10 secondary [mm^2]
 
@@ -52,7 +52,6 @@ base = evaluateDesign(base,S,V1,V2,f,a,I1,D,Wwin,Hwin, ...
     rho_cu,dens_cu,dens_fe,kf,price_cu,price_fe,B_ref,Pfe_ref,Bcorr);
 
 %% Optimization range
-% Restricted to Maxwell-validated practical region
 N1_values = 220:1:230;
 Wc_values = (46:0.25:47)*1e-3;
 
@@ -88,7 +87,6 @@ for N1 = N1_values
         end
 
         F = wCost*(d.Cost/base.Cost) + wLoss*(d.Ploss/base.Ploss);
-
         d.F = F;
 
         results = [results; ...
@@ -102,9 +100,13 @@ for N1 = N1_values
     end
 end
 
+if isempty(results)
+    error('No feasible design found. Relax constraints or check input values.');
+end
+
 %% Print summary
 fprintf('\n========================================================\n');
-fprintf(' TASK 4 BONUS OPTIMIZATION SUMMARY\n');
+fprintf(' TASK 4 OPTIMIZATION SUMMARY\n');
 fprintf('========================================================\n');
 fprintf('%-14s %12s %12s\n','Quantity','Baseline','Optimized');
 fprintf('%-14s %12.3f %12.3f\n','N1',base.N1,best.N1);
@@ -126,38 +128,15 @@ fprintf('Loss reduction             : %6.2f %%\n',100*(1-best.Ploss/base.Ploss))
 fprintf('Efficiency gain            : %+6.3f points\n',100*(best.eff-base.eff));
 fprintf('========================================================\n');
 
-
-%% Output folder on Desktop
+%% Output folder
 desktopPath = fullfile(getenv('USERPROFILE'), 'Desktop');
-outFolder = fullfile(desktopPath, 'Transformer_Optimization_Results');
+outFolder = fullfile(desktopPath, 'Transformer_Report_Figures');
 
 if ~exist(outFolder, 'dir')
     mkdir(outFolder);
 end
 
-%% Save summary table
-summaryTable = table( ...
-    ["N1"; "N2"; "Wc_mm"; "Aw1_mm2"; "Aw2_mm2"; "Bmax_T"; "Pcu_W"; ...
-     "Pfe_W"; "Ploss_W"; "Efficiency_percent"; "Copper_mass_kg"; ...
-     "Core_mass_kg"; "Cost_USD"], ...
-    [base.N1; base.N2; base.Wc*1e3; base.Aw1; base.Aw2; base.Bmax; ...
-     base.Pcu; base.Pfe; base.Ploss; base.eff*100; base.m_cu; ...
-     base.m_fe; base.Cost], ...
-    [best.N1; best.N2; best.Wc*1e3; best.Aw1; best.Aw2; best.Bmax; ...
-     best.Pcu; best.Pfe; best.Ploss; best.eff*100; best.m_cu; ...
-     best.m_fe; best.Cost], ...
-    'VariableNames', {'Quantity','Baseline','Optimized'});
-
-writetable(summaryTable, fullfile(outFolder, 'optimization_summary.csv'));
-
-%% Save all feasible results
-resultsTable = array2table(results, ...
-    'VariableNames', {'N1','N2','Wc_mm','Bmax_T','Pcu_W','Pfe_W', ...
-    'Ploss_W','Efficiency_percent','Copper_mass_kg','Core_mass_kg', ...
-    'Cost_USD','Objective_F'});
-
-writetable(resultsTable, fullfile(outFolder, 'all_feasible_designs.csv'));
-%% Plots
+%% Plot 1
 figure('Color','w');
 scatter(results(:,11),results(:,7),45,results(:,4),'filled'); hold on;
 plot(base.Cost,base.Ploss,'ks','MarkerSize',10,'LineWidth',2);
@@ -165,11 +144,13 @@ plot(best.Cost,best.Ploss,'rp','MarkerSize',14,'LineWidth',2);
 grid on;
 xlabel('Material cost [USD]');
 ylabel('Total loss [W]');
-title('Task 4 Optimization: Cost vs Total Loss');
+title('Optimization: Cost vs Total Loss');
 legend('Feasible designs','Baseline','Selected optimized design','Location','best');
 cb = colorbar;
 ylabel(cb,'Bmax [T]');
+exportgraphics(gcf, fullfile(outFolder, 'opt_cost_loss.png'), 'Resolution', 300);
 
+%% Plot 2
 figure('Color','w');
 scatter(results(:,11),results(:,8),45,results(:,4),'filled'); hold on;
 plot(base.Cost,base.eff*100,'ks','MarkerSize',10,'LineWidth',2);
@@ -177,11 +158,13 @@ plot(best.Cost,best.eff*100,'rp','MarkerSize',14,'LineWidth',2);
 grid on;
 xlabel('Material cost [USD]');
 ylabel('Efficiency [%]');
-title('Task 4 Optimization: Efficiency vs Cost');
+title('Optimization: Efficiency vs Cost');
 legend('Feasible designs','Baseline','Selected optimized design','Location','best');
 cb = colorbar;
 ylabel(cb,'Bmax [T]');
+exportgraphics(gcf, fullfile(outFolder, 'opt_efficiency_cost.png'), 'Resolution', 300);
 
+%% Plot 3
 figure('Color','w');
 scatter(results(:,1),results(:,3),45,results(:,4),'filled'); hold on;
 plot(best.N1,best.Wc*1e3,'rp','MarkerSize',14,'LineWidth',2);
@@ -191,14 +174,15 @@ ylabel('Center limb width Wc [mm]');
 title('Bmax Map of Feasible Designs');
 cb = colorbar;
 ylabel(cb,'Bmax [T]');
+exportgraphics(gcf, fullfile(outFolder, 'opt_bmax_map.png'), 'Resolution', 300);
+
+fprintf('\nFigures saved to:\n%s\n', outFolder);
 
 %% ================= LOCAL FUNCTION =================
 function d = evaluateDesign(d,S,V1,V2,f,a,I1,D,Wwin,Hwin, ...
     rho_cu,dens_cu,dens_fe,kf,price_cu,price_fe,B_ref,Pfe_ref,Bcorr)
 
     Ac = d.Wc*D*kf;
-
-    % Analytical B multiplied by calibration factor from Maxwell baseline
     d.Bmax = Bcorr * V1/(4.44*f*d.N1*Ac);
 
     MLTbase = 2*(d.Wc + D);
@@ -211,8 +195,8 @@ function d = evaluateDesign(d,S,V1,V2,f,a,I1,D,Wwin,Hwin, ...
     R1 = rho_cu*l1/d.Aw1;
     R2 = rho_cu*l2/d.Aw2;
 
-    d.Req = R1 + a^2*R2;
-    d.Pcu = I1^2*d.Req;
+    d.Rcu_eq = R1 + a^2*R2;
+    d.Pcu = I1^2*d.Rcu_eq;
 
     Vcu = (l1*d.Aw1 + l2*d.Aw2)*1e-6;
     d.m_cu = Vcu*dens_cu;
